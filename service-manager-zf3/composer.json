@@ -1,0 +1,17 @@
+{
+    "name": "root/zend3",
+    "require": {
+        "zendframework/zend-servicemanager": "^3.0"
+    },
+    "authors": [
+        {
+            "name": "Jhon Mike",
+            "email": "developer@jhonmike.com.br"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Play\\": "src/"
+        }
+    }
+}
