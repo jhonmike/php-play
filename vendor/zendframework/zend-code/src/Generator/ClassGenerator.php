@@ -719,7 +719,7 @@ class ClassGenerator extends AbstractGenerator
      * @return ClassGenerator
      */
     public function addMethod(
-        $name,
+        $name = null,
         array $parameters = [],
         $flags = MethodGenerator::FLAG_PUBLIC,
         $body = null,

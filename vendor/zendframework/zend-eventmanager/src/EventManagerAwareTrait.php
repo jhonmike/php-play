@@ -2,9 +2,9 @@
 /**
  * Zend Framework (http://framework.zend.com/)
  *
- * @link      http://github.com/zendframework/zend-eventmanager for the canonical source repository
+ * @link      http://github.com/zendframework/zf2 for the canonical source repository
  * @copyright Copyright (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
- * @license   https://github.com/zendframework/zend-eventmanager/blob/master/LICENSE.md
+ * @license   http://framework.zend.com/license/new-bsd New BSD License
  */
 
 namespace Zend\EventManager;
@@ -36,6 +36,7 @@ trait EventManagerAwareTrait
      * $this->eventIdentifier property.
      *
      * @param  EventManagerInterface $events
+     * @return mixed
      */
     public function setEventManager(EventManagerInterface $events)
     {
@@ -56,6 +57,7 @@ trait EventManagerAwareTrait
         if (method_exists($this, 'attachDefaultListeners')) {
             $this->attachDefaultListeners();
         }
+        return $this;
     }
 
     /**

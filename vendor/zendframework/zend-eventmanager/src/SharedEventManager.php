@@ -2,12 +2,15 @@
 /**
  * Zend Framework (http://framework.zend.com/)
  *
- * @link      http://github.com/zendframework/zend-eventmanager for the canonical source repository
+ * @link      http://github.com/zendframework/zf2 for the canonical source repository
  * @copyright Copyright (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
- * @license   https://github.com/zendframework/zend-eventmanager/blob/master/LICENSE.md
+ * @license   http://framework.zend.com/license/new-bsd New BSD License
  */
 
 namespace Zend\EventManager;
+
+use Zend\Stdlib\CallbackHandler;
+use Zend\Stdlib\PriorityQueue;
 
 /**
  * Shared/contextual EventManager
@@ -16,7 +19,9 @@ namespace Zend\EventManager;
  * The assumption is that the SharedEventManager will be injected into EventManager
  * instances, and then queried for additional listeners when triggering an event.
  */
-class SharedEventManager implements SharedEventManagerInterface
+class SharedEventManager implements
+    SharedEventAggregateAwareInterface,
+    SharedEventManagerInterface
 {
     /**
      * Identifiers with event connections
@@ -25,198 +30,150 @@ class SharedEventManager implements SharedEventManagerInterface
     protected $identifiers = [];
 
     /**
-     * Attach a listener to an event emitted by components with specific identifiers.
+     * Attach a listener to an event
      *
-     * Allows attaching a listener to an event offered by an identifying
-     * components. As an example, the following connects to the "getAll" event
-     * of both an AbstractResource and EntityResource:
+     * Allows attaching a callback to an event offered by one or more
+     * identifying components. As an example, the following connects to the
+     * "getAll" event of both an AbstractResource and EntityResource:
      *
      * <code>
      * $sharedEventManager = new SharedEventManager();
-     * foreach (['My\Resource\AbstractResource', 'My\Resource\EntityResource'] as $identifier) {
-     *     $sharedEventManager->attach(
-     *         $identifier,
-     *         'getAll',
-     *         function ($e) use ($cache) {
-     *             if (!$id = $e->getParam('id', false)) {
-     *                 return;
-     *             }
-     *             if (!$data = $cache->load(get_class($resource) . '::getOne::' . $id )) {
-     *                 return;
-     *             }
-     *             return $data;
+     * $sharedEventManager->attach(
+     *     array('My\Resource\AbstractResource', 'My\Resource\EntityResource'),
+     *     'getAll',
+     *     function ($e) use ($cache) {
+     *         if (!$id = $e->getParam('id', false)) {
+     *             return;
      *         }
-     *     );
-     * }
+     *         if (!$data = $cache->load(get_class($resource) . '::getOne::' . $id )) {
+     *             return;
+     *         }
+     *         return $data;
+     *     }
+     * );
      * </code>
      *
-     * @param  string $identifier Identifier for event emitting component.
+     * @param  string|array $id Identifier(s) for event emitting component(s)
      * @param  string $event
-     * @param  callable $listener Listener that will handle the event.
+     * @param  callable $callback PHP Callback
      * @param  int $priority Priority at which listener should execute
-     * @return void
-     * @throws Exception\InvalidArgumentException for invalid identifier arguments.
-     * @throws Exception\InvalidArgumentException for invalid event arguments.
+     * @return CallbackHandler|array Either CallbackHandler or array of CallbackHandlers
      */
-    public function attach($identifier, $event, callable $listener, $priority = 1)
+    public function attach($id, $event, $callback, $priority = 1)
     {
-        if (! is_string($identifier) || empty($identifier)) {
-            throw new Exception\InvalidArgumentException(sprintf(
-                'Invalid identifier provided; must be a string; received "%s"',
-                (is_object($identifier) ? get_class($identifier) : gettype($identifier))
-            ));
+        $ids = (array) $id;
+        $listeners = [];
+        foreach ($ids as $id) {
+            if (!array_key_exists($id, $this->identifiers)) {
+                $this->identifiers[$id] = new EventManager($id);
+            }
+            $listeners[] = $this->identifiers[$id]->attach($event, $callback, $priority);
         }
-
-        if (! is_string($event) || empty($event)) {
-            throw new Exception\InvalidArgumentException(sprintf(
-                'Invalid event provided; must be a non-empty string; received "%s"',
-                (is_object($event) ? get_class($event) : gettype($event))
-            ));
+        if (count($listeners) > 1) {
+            return $listeners;
         }
-
-        $this->identifiers[$identifier][$event][((int) $priority) . '.0'][] = $listener;
+        return $listeners[0];
     }
 
     /**
-     * @inheritDoc
+     * Attach a listener aggregate
+     *
+     * Listener aggregates accept an EventManagerInterface instance, and call attachShared()
+     * one or more times, typically to attach to multiple events using local
+     * methods.
+     *
+     * @param  SharedListenerAggregateInterface $aggregate
+     * @param  int $priority If provided, a suggested priority for the aggregate to use
+     * @return mixed return value of {@link ListenerAggregateInterface::attachShared()}
      */
-    public function detach(callable $listener, $identifier = null, $eventName = null, $force = false)
+    public function attachAggregate(SharedListenerAggregateInterface $aggregate, $priority = 1)
     {
-        // No identifier or wildcard identifier: loop through all identifiers and detach
-        if (null === $identifier || ('*' === $identifier && ! $force)) {
-            foreach (array_keys($this->identifiers) as $identifier) {
-                $this->detach($listener, $identifier, $eventName, true);
+        return $aggregate->attachShared($this, $priority);
+    }
+
+    /**
+     * Detach a listener from an event offered by a given resource
+     *
+     * @param  string|int $id
+     * @param  CallbackHandler $listener
+     * @return bool Returns true if event and listener found, and unsubscribed; returns false if either event or listener not found
+     */
+    public function detach($id, CallbackHandler $listener)
+    {
+        if (!array_key_exists($id, $this->identifiers)) {
+            return false;
+        }
+        return $this->identifiers[$id]->detach($listener);
+    }
+
+    /**
+     * Detach a listener aggregate
+     *
+     * Listener aggregates accept a SharedEventManagerInterface instance, and call detachShared()
+     * of all previously attached listeners.
+     *
+     * @param  SharedListenerAggregateInterface $aggregate
+     * @return mixed return value of {@link SharedListenerAggregateInterface::detachShared()}
+     */
+    public function detachAggregate(SharedListenerAggregateInterface $aggregate)
+    {
+        return $aggregate->detachShared($this);
+    }
+
+    /**
+     * Retrieve all registered events for a given resource
+     *
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  string|int $id
+     * @return array
+     */
+    public function getEvents($id)
+    {
+        if (!array_key_exists($id, $this->identifiers)) {
+            //Check if there are any id wildcards listeners
+            if ('*' != $id && array_key_exists('*', $this->identifiers)) {
+                return $this->identifiers['*']->getEvents();
             }
-            return;
+            return false;
         }
-
-        if (! is_string($identifier) || empty($identifier)) {
-            throw new Exception\InvalidArgumentException(sprintf(
-                'Invalid identifier provided; must be a string, received %s',
-                (is_object($identifier) ? get_class($identifier) : gettype($identifier))
-            ));
-        }
-
-        // Do we have any listeners on the provided identifier?
-        if (! isset($this->identifiers[$identifier])) {
-            return;
-        }
-
-        if (null === $eventName || ('*' === $eventName && ! $force)) {
-            foreach (array_keys($this->identifiers[$identifier]) as $eventName) {
-                $this->detach($listener, $identifier, $eventName, true);
-            }
-            return;
-        }
-
-        if (! is_string($eventName) || empty($eventName)) {
-            throw new Exception\InvalidArgumentException(sprintf(
-                'Invalid event name provided; must be a string, received %s',
-                (is_object($eventName) ? get_class($eventName) : gettype($eventName))
-            ));
-        }
-
-        if (! isset($this->identifiers[$identifier][$eventName])) {
-            return;
-        }
-
-        foreach ($this->identifiers[$identifier][$eventName] as $priority => $listeners) {
-            foreach ($listeners as $index => $evaluatedListener) {
-                if ($evaluatedListener !== $listener) {
-                    continue;
-                }
-
-                // Found the listener; remove it.
-                unset($this->identifiers[$identifier][$eventName][$priority][$index]);
-
-                // Is the priority queue empty?
-                if (empty($this->identifiers[$identifier][$eventName][$priority])) {
-                    unset($this->identifiers[$identifier][$eventName][$priority]);
-                    break;
-                }
-            }
-
-            // Is the event queue empty?
-            if (empty($this->identifiers[$identifier][$eventName])) {
-                unset($this->identifiers[$identifier][$eventName]);
-                break;
-            }
-
-        }
-
-        // Is the identifier queue now empty? Remove it.
-        if (empty($this->identifiers[$identifier])) {
-            unset($this->identifiers[$identifier]);
-        }
+        return $this->identifiers[$id]->getEvents();
     }
 
     /**
      * Retrieve all listeners for a given identifier and event
      *
-     * @param  array $identifiers
-     * @param  string $eventName
-     * @return array[]
-     * @throws Exception\InvalidArgumentException
+     * @param  string|int $id
+     * @param  string|int $event
+     * @return false|PriorityQueue
      */
-    public function getListeners(array $identifiers, $eventName)
+    public function getListeners($id, $event)
     {
-        if ('*' === $eventName || ! is_string($eventName) || empty($eventName)) {
-            throw new Exception\InvalidArgumentException(sprintf(
-                'Event name passed to %s must be a non-empty, non-wildcard string',
-                __METHOD__
-            ));
+        if (!array_key_exists($id, $this->identifiers)) {
+            return false;
         }
-
-        $listeners = [];
-
-        foreach ($identifiers as $identifier) {
-            if ('*' === $identifier || ! is_string($identifier) || empty($identifier)) {
-                throw new Exception\InvalidArgumentException(sprintf(
-                    'Identifier names passed to %s must be non-empty, non-wildcard strings',
-                    __METHOD__
-                ));
-            }
-
-            $listenersByIdentifier = isset($this->identifiers[$identifier]) ? $this->identifiers[$identifier] : [];
-
-            $listeners = array_merge_recursive(
-                $listeners,
-                isset($listenersByIdentifier[$eventName]) ? $listenersByIdentifier[$eventName] : [],
-                isset($listenersByIdentifier['*']) ? $listenersByIdentifier['*'] : []
-            );
-        }
-
-        if (isset($this->identifiers['*']) && ! in_array('*', $identifiers)) {
-            $wildcardIdentifier = $this->identifiers['*'];
-
-            $listeners = array_merge_recursive(
-                $listeners,
-                isset($wildcardIdentifier[$eventName]) ? $wildcardIdentifier[$eventName] : [],
-                isset($wildcardIdentifier['*']) ? $wildcardIdentifier['*'] : []
-            );
-        }
-
-        return $listeners;
+        return $this->identifiers[$id]->getListeners($event);
     }
 
     /**
-     * @inheritDoc
+     * Clear all listeners for a given identifier, optionally for a specific event
+     *
+     * @param  string|int $id
+     * @param  null|string $event
+     * @return bool
      */
-    public function clearListeners($identifier, $eventName = null)
+    public function clearListeners($id, $event = null)
     {
-        if (! array_key_exists($identifier, $this->identifiers)) {
+        if (!array_key_exists($id, $this->identifiers)) {
             return false;
         }
 
-        if (null === $eventName) {
-            unset($this->identifiers[$identifier]);
-            return;
+        if (null === $event) {
+            unset($this->identifiers[$id]);
+            return true;
         }
 
-        if (! isset($this->identifiers[$identifier][$eventName])) {
-            return;
-        }
-
-        unset($this->identifiers[$identifier][$eventName]);
+        return $this->identifiers[$id]->clearListeners($event);
     }
 }

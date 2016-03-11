@@ -2,142 +2,116 @@
 /**
  * Zend Framework (http://framework.zend.com/)
  *
- * @link      http://github.com/zendframework/zend-eventmanager for the canonical source repository
+ * @link      http://github.com/zendframework/zf2 for the canonical source repository
  * @copyright Copyright (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
- * @license   https://github.com/zendframework/zend-eventmanager/blob/master/LICENSE.md
+ * @license   http://framework.zend.com/license/new-bsd New BSD License
  */
 
 namespace Zend\EventManager;
 
 use Traversable;
+use Zend\Stdlib\CallbackHandler;
 
 /**
  * Interface for messengers
  */
-interface EventManagerInterface extends SharedEventsCapableInterface
+interface EventManagerInterface extends SharedEventManagerAwareInterface
 {
-    /**
-     * Create and trigger an event.
-     *
-     * Use this method when you do not want to create an EventInterface
-     * instance prior to triggering. You will be required to pass:
-     *
-     * - the event name
-     * - the event target (can be null)
-     * - any event parameters you want to provide (empty array by default)
-     *
-     * It will create the Event instance for you and then trigger all listeners
-     * related to the event.
-     *
-     * @param  string $eventName
-     * @param  null|object|string $target
-     * @param  array|object $argv
-     * @return ResponseCollection
-     */
-    public function trigger($eventName, $target = null, $argv = []);
-
-    /**
-     * Create and trigger an event, applying a callback to each listener result.
-     *
-     * Use this method when you do not want to create an EventInterface
-     * instance prior to triggering. You will be required to pass:
-     *
-     * - the event name
-     * - the event target (can be null)
-     * - any event parameters you want to provide (empty array by default)
-     *
-     * It will create the Event instance for you, and trigger all listeners
-     * related to the event.
-     *
-     * The result of each listener is passed to $callback; if $callback returns
-     * a boolean true value, the manager must short-circuit listener execution.
-     *
-     * @param  callable $callback
-     * @param  string $eventName
-     * @param  null|object|string $target
-     * @param  array|object $argv
-     * @return ResponseCollection
-     */
-    public function triggerUntil(callable $callback, $eventName, $target = null, $argv = []);
-
     /**
      * Trigger an event
      *
-     * Provided an EventInterface instance, this method will trigger listeners
-     * based on the event name, raising an exception if the event name is missing.
+     * Should allow handling the following scenarios:
+     * - Passing Event object only
+     * - Passing event name and Event object only
+     * - Passing event name, target, and Event object
+     * - Passing event name, target, and array|ArrayAccess of arguments
+     * - Passing event name, target, array|ArrayAccess of arguments, and callback
      *
-     * @param  EventInterface $event
+     * @param  string|EventInterface $event
+     * @param  object|string $target
+     * @param  array|object $argv
+     * @param  null|callable $callback
      * @return ResponseCollection
      */
-    public function triggerEvent(EventInterface $event);
+    public function trigger($event, $target = null, $argv = [], $callback = null);
 
     /**
-     * Trigger an event, applying a callback to each listener result.
+     * Trigger an event until the given callback returns a boolean true
      *
-     * Provided an EventInterface instance, this method will trigger listeners
-     * based on the event name, raising an exception if the event name is missing.
+     * Should allow handling the following scenarios:
+     * - Passing Event object and callback only
+     * - Passing event name, Event object, and callback only
+     * - Passing event name, target, Event object, and callback
+     * - Passing event name, target, array|ArrayAccess of arguments, and callback
      *
-     * The result of each listener is passed to $callback; if $callback returns
-     * a boolean true value, the manager must short-circuit listener execution.
-     *
+     * @deprecated The signature of this method will change in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/changed.md}
+     *     for details.
+     * @param  string|EventInterface $event
+     * @param  object|string $target
+     * @param  array|object $argv
      * @param  callable $callback
-     * @param  EventInterface $event
      * @return ResponseCollection
      */
-    public function triggerEventUntil(callable $callback, EventInterface $event);
+    public function triggerUntil($event, $target, $argv = null, $callback = null);
 
     /**
      * Attach a listener to an event
      *
-     * The first argument is the event, and the next argument is a
-     * callable that will respond to that event.
-     *
-     * The last argument indicates a priority at which the event should be
-     * executed; by default, this value is 1; however, you may set it for any
-     * integer value. Higher values have higher priority (i.e., execute first).
-     *
-     * You can specify "*" for the event name. In such cases, the listener will
-     * be triggered for every event *that has registered listeners at the time
-     * it is attached*. As such, register wildcard events last whenever possible!
-     *
-     * @param  string $eventName Event to which to listen.
-     * @param  callable $listener
-     * @param  int $priority Priority at which to register listener.
-     * @return callable
+     * @param  string $event
+     * @param  callable $callback
+     * @param  int $priority Priority at which to register listener
+     * @return CallbackHandler
      */
-    public function attach($eventName, callable $listener, $priority = 1);
+    public function attach($event, $callback = null, $priority = 1);
 
     /**
-     * Detach a listener.
+     * Detach an event listener
      *
-     * If no $event or '*' is provided, detaches listener from all events;
-     * otherwise, detaches only from the named event.
-     *
-     * @param callable $listener
-     * @param null|string $eventName Event from which to detach; null and '*'
-     *     indicate all events.
-     * @return void
+     * @param  CallbackHandler|ListenerAggregateInterface $listener
+     * @return bool
      */
-    public function detach(callable $listener, $eventName = null);
+    public function detach($listener);
+
+    /**
+     * Get a list of events for which this collection has listeners
+     *
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @return array
+     */
+    public function getEvents();
+
+    /**
+     * Retrieve a list of listeners registered to a given event
+     *
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  string $event
+     * @return array|object
+     */
+    public function getListeners($event);
 
     /**
      * Clear all listeners for a given event
      *
-     * @param  string $eventName
+     * @param  string $event
      * @return void
      */
-    public function clearListeners($eventName);
+    public function clearListeners($event);
 
     /**
-     * Provide an event prototype to use with trigger().
+     * Set the event class to utilize
      *
-     * When `trigger()` needs to create an event instance, it should clone the
-     * prototype provided to this method.
-     *
-     * @param  EventInterface $prototype
-     * @return void
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  string $class
+     * @return EventManagerInterface
      */
-    public function setEventPrototype(EventInterface $prototype);
+    public function setEventClass($class);
 
     /**
      * Get the identifier(s) for this EventManager
@@ -149,16 +123,39 @@ interface EventManagerInterface extends SharedEventsCapableInterface
     /**
      * Set the identifiers (overrides any currently set identifiers)
      *
-     * @param  string[] $identifiers
-     * @return void
+     * @param string|int|array|Traversable $identifiers
+     * @return EventManagerInterface
      */
-    public function setIdentifiers(array $identifiers);
+    public function setIdentifiers($identifiers);
 
     /**
-     * Add identifier(s) (appends to any currently set identifiers)
+     * Add some identifier(s) (appends to any currently set identifiers)
      *
-     * @param  string[] $identifiers
-     * @return void
+     * @param string|int|array|Traversable $identifiers
+     * @return EventManagerInterface
      */
-    public function addIdentifiers(array $identifiers);
+    public function addIdentifiers($identifiers);
+
+    /**
+     * Attach a listener aggregate
+     *
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  ListenerAggregateInterface $aggregate
+     * @param  int $priority If provided, a suggested priority for the aggregate to use
+     * @return mixed return value of {@link ListenerAggregateInterface::attach()}
+     */
+    public function attachAggregate(ListenerAggregateInterface $aggregate, $priority = 1);
+
+    /**
+     * Detach a listener aggregate
+     *
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  ListenerAggregateInterface $aggregate
+     * @return mixed return value of {@link ListenerAggregateInterface::detach()}
+     */
+    public function detachAggregate(ListenerAggregateInterface $aggregate);
 }

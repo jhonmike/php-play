@@ -1,13 +1,13 @@
 <?php
 namespace ZendBench\ServiceManager\BenchAsset;
 
-use Zend\ServiceManager\Factory\FactoryInterface;
-use Interop\Container\ContainerInterface;
+use Zend\ServiceManager\FactoryInterface;
+use Zend\ServiceManager\ServiceLocatorInterface;
 
 class FactoryFoo implements FactoryInterface
 {
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
+    public function createService(ServiceLocatorInterface $serviceLocator)
     {
-        return new Foo($options);
+        return new Foo();
     }
 }

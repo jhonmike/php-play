@@ -2,12 +2,15 @@
 /**
  * Zend Framework (http://framework.zend.com/)
  *
- * @link      http://github.com/zendframework/zend-eventmanager for the canonical source repository
+ * @link      http://github.com/zendframework/zf2 for the canonical source repository
  * @copyright Copyright (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
- * @license   https://github.com/zendframework/zend-eventmanager/blob/master/LICENSE.md
+ * @license   http://framework.zend.com/license/new-bsd New BSD License
  */
 
 namespace Zend\EventManager;
+
+use Zend\Stdlib\CallbackHandler;
+use Zend\Stdlib\PriorityQueue;
 
 /**
  * Interface for shared event listener collections
@@ -15,45 +18,51 @@ namespace Zend\EventManager;
 interface SharedEventManagerInterface
 {
     /**
-     * Attach a listener to an event emitted by components with specific identifiers.
+     * Retrieve all listeners for a given identifier and event
      *
-     * @param  string $identifier Identifier for event emitting component
-     * @param  string $eventName
-     * @param  callable $listener Listener that will handle the event.
+     * @param  string|int $id
+     * @param  string|int $event
+     * @return false|PriorityQueue
+     */
+    public function getListeners($id, $event);
+
+    /**
+     * Attach a listener to an event
+     *
+     * @param  string|array $id Identifier(s) for event emitting component(s)
+     * @param  string $event
+     * @param  callable $callback PHP Callback
      * @param  int $priority Priority at which listener should execute
+     * @return CallbackHandler|array Either CallbackHandler or array of CallbackHandlers
      */
-    public function attach($identifier, $eventName, callable $listener, $priority = 1);
+    public function attach($id, $event, $callback, $priority = 1);
 
     /**
-     * Detach a shared listener.
+     * Detach a listener from an event offered by a given resource
      *
-     * Allows detaching a listener from one or more events to which it may be
-     * attached.
-     *
-     * @param  callable $listener Listener to detach.
-     * @param  null|string $identifier Identifier from which to detach; null indicates
-     *      all registered identifiers.
-     * @param  null|string $eventName Event from which to detach; null indicates
-     *      all registered events.
-     * @throws Exception\InvalidArgumentException for invalid identifier arguments.
-     * @throws Exception\InvalidArgumentException for invalid event arguments.
+     * @param  string|int $id
+     * @param  CallbackHandler $listener
+     * @return bool Returns true if event and listener found, and unsubscribed; returns false if either event or listener not found
      */
-    public function detach(callable $listener, $identifier = null, $eventName = null);
+    public function detach($id, CallbackHandler $listener);
 
     /**
-     * Retrieve all listeners for given identifiers
+     * Retrieve all registered events for a given resource
      *
-     * @param  array $identifiers
-     * @param  string $eventName
+     * @deprecated This method is deprecated with 2.6.0, and will be removed in 3.0.0.
+     *     See {@link https://github.com/zendframework/zend-eventmanager/blob/develop/doc/book/migration/removed.md}
+     *     for details.
+     * @param  string|int $id
      * @return array
      */
-    public function getListeners(array $identifiers, $eventName);
+    public function getEvents($id);
 
     /**
      * Clear all listeners for a given identifier, optionally for a specific event
      *
-     * @param  string $identifier
-     * @param  null|string $eventName
+     * @param  string|int $id
+     * @param  null|string $event
+     * @return bool
      */
-    public function clearListeners($identifier, $eventName = null);
+    public function clearListeners($id, $event = null);
 }

@@ -1,22 +1,21 @@
 <?php
 namespace ZendBench\ServiceManager\BenchAsset;
 
-use Zend\ServiceManager\Factory\AbstractFactoryInterface;
-use Interop\Container\ContainerInterface;
+use Zend\ServiceManager\AbstractFactoryInterface;
+use Zend\ServiceManager\ServiceLocatorInterface;
 
 class AbstractFactoryFoo implements AbstractFactoryInterface
 {
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
-    {
-        if ($requestedName === 'foo') {
-            return new Foo($options);
-        }
-        return false;
-    }
+  public function canCreateServiceWithName(ServiceLocatorInterface $serviceLocator, $name, $requestedName)
+  {
+      if ($name != 'foo') {
+          return false;
+      }
+      return true;
+  }
 
-    public function canCreate(ContainerInterface $container, $requestedName)
+    public function createServiceWithName(ServiceLocatorInterface $serviceLocator, $name, $requestedName)
     {
-        return ($requestedName === 'foo');
+        return new Foo();
     }
-
 }
